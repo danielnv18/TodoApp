@@ -44,3 +44,4 @@ Thumbs.db
 *.7z
 *.db
 *.sqlite
+.env

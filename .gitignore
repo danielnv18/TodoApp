@@ -1,0 +1,46 @@
+# .NET Core
+## Build results
+[Dd]ebug/
+[Rr]elease/
+**/bin/
+**/obj/
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+
+# NuGet
+.nuget/
+*.nupkg
+*.bak
+
+# Npm
+node_modules/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Misc
+*.user
+*.suo
+*.sln.docstates
+*.sdf
+*.vssscc
+*.vspscc
+*.vsscc
+*.orig
+*.pyc
+*.pyo
+*.pyd
+*.pid
+*.log
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.db
+*.sqlite

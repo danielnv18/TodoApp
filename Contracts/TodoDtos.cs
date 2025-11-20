@@ -27,3 +27,8 @@ public record TodoResponse(
     bool IsComplete,
     DateTime CreatedAtUtc
 );
+
+/// <summary>
+/// Partial update payload for completion state.
+/// </summary>
+public record TodoCompletionRequest(bool IsComplete);

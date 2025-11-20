@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using TodoApi.Contracts;
 using TodoApi.Data;
+using TodoApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,4 +28,95 @@ app.UseHttpsRedirection();
 // Simple root endpoint to verify the API is running.
 app.MapGet("/", () => Results.Ok(new { message = "Todo API is running" }));
 
+var todos = app.MapGroup("/todos").WithTags("Todos");
+
+todos.MapGet("/", async (TodoDbContext db) =>
+{
+    var items = await db.Todos.AsNoTracking()
+        .OrderBy(t => t.Id)
+        .Select(t => new TodoResponse(t.Id, t.Name, t.IsComplete, t.CreatedAtUtc))
+        .ToListAsync();
+    return Results.Ok(items);
+});
+
+todos.MapGet("/{id:int}", async (int id, TodoDbContext db) =>
+{
+    var todo = await db.Todos.AsNoTracking()
+        .Where(t => t.Id == id)
+        .Select(t => new TodoResponse(t.Id, t.Name, t.IsComplete, t.CreatedAtUtc))
+        .FirstOrDefaultAsync();
+
+    return todo is null ? Results.NotFound() : Results.Ok(todo);
+});
+
+todos.MapPost("/", async (TodoCreateRequest request, TodoDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name))
+    {
+        return Results.BadRequest(new { error = "Name is required." });
+    }
+
+    var todo = new Todo
+    {
+        Name = request.Name.Trim(),
+        IsComplete = request.IsComplete,
+        CreatedAtUtc = DateTime.UtcNow
+    };
+
+    db.Todos.Add(todo);
+    await db.SaveChangesAsync();
+
+    var response = new TodoResponse(todo.Id, todo.Name, todo.IsComplete, todo.CreatedAtUtc);
+    return Results.Created($"/todos/{todo.Id}", response);
+});
+
+todos.MapPut("/{id:int}", async (int id, TodoUpdateRequest request, TodoDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name))
+    {
+        return Results.BadRequest(new { error = "Name is required." });
+    }
+
+    var todo = await db.Todos.FindAsync(id);
+    if (todo is null)
+    {
+        return Results.NotFound();
+    }
+
+    todo.Name = request.Name.Trim();
+    todo.IsComplete = request.IsComplete;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new TodoResponse(todo.Id, todo.Name, todo.IsComplete, todo.CreatedAtUtc));
+});
+
+todos.MapPatch("/{id:int}/status", async (int id, TodoCompletionRequest request, TodoDbContext db) =>
+{
+    var todo = await db.Todos.FindAsync(id);
+    if (todo is null)
+    {
+        return Results.NotFound();
+    }
+
+    todo.IsComplete = request.IsComplete;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new TodoResponse(todo.Id, todo.Name, todo.IsComplete, todo.CreatedAtUtc));
+});
+
+todos.MapDelete("/{id:int}", async (int id, TodoDbContext db) =>
+{
+    var todo = await db.Todos.FindAsync(id);
+    if (todo is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Todos.Remove(todo);
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+});
+
+app.Run();
 app.Run();

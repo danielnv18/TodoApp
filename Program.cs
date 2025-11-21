@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using TodoApi.Contracts;
 using TodoApi.Data;
 using TodoApi.Models;
+using TodoApi.Validation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHealthChecks().AddDbContextCheck<TodoDbContext>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
@@ -23,10 +27,29 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseExceptionHandler(exceptionHandlerApp =>
+{
+    exceptionHandlerApp.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>();
+        var problem = Results.Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "An unexpected error occurred.",
+            detail: exception?.Error.Message,
+            extensions: new Dictionary<string, object?>
+            {
+                ["traceId"] = context.TraceIdentifier
+            });
+
+        await problem.ExecuteAsync(context);
+    });
+});
+
 app.UseHttpsRedirection();
 
 // Simple root endpoint to verify the API is running.
 app.MapGet("/", () => Results.Ok(new { message = "Todo API is running" }));
+app.MapHealthChecks("/health");
 
 var todos = app.MapGroup("/todos").WithTags("Todos");
 
@@ -51,9 +74,18 @@ todos.MapGet("/{id:int}", async (int id, TodoDbContext db) =>
 
 todos.MapPost("/", async (TodoCreateRequest request, TodoDbContext db) =>
 {
+    var validationErrors = ValidationHelpers.Validate(request);
+    if (validationErrors is not null)
+    {
+        return Results.ValidationProblem(validationErrors);
+    }
+
     if (string.IsNullOrWhiteSpace(request.Name))
     {
-        return Results.BadRequest(new { error = "Name is required." });
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Name"] = ["Name cannot be empty or whitespace."]
+        });
     }
 
     var todo = new Todo
@@ -72,9 +104,18 @@ todos.MapPost("/", async (TodoCreateRequest request, TodoDbContext db) =>
 
 todos.MapPut("/{id:int}", async (int id, TodoUpdateRequest request, TodoDbContext db) =>
 {
+    var validationErrors = ValidationHelpers.Validate(request);
+    if (validationErrors is not null)
+    {
+        return Results.ValidationProblem(validationErrors);
+    }
+
     if (string.IsNullOrWhiteSpace(request.Name))
     {
-        return Results.BadRequest(new { error = "Name is required." });
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Name"] = ["Name cannot be empty or whitespace."]
+        });
     }
 
     var todo = await db.Todos.FindAsync(id);
@@ -92,6 +133,12 @@ todos.MapPut("/{id:int}", async (int id, TodoUpdateRequest request, TodoDbContex
 
 todos.MapPatch("/{id:int}/status", async (int id, TodoCompletionRequest request, TodoDbContext db) =>
 {
+    var validationErrors = ValidationHelpers.Validate(request);
+    if (validationErrors is not null)
+    {
+        return Results.ValidationProblem(validationErrors);
+    }
+
     var todo = await db.Todos.FindAsync(id);
     if (todo is null)
     {
@@ -118,5 +165,4 @@ todos.MapDelete("/{id:int}", async (int id, TodoDbContext db) =>
     return Results.NoContent();
 });
 
-app.Run();
 app.Run();

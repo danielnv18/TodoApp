@@ -119,4 +119,6 @@ todos.MapDelete("/{id:int}", async (int id, TodoDbContext db) =>
 });
 
 app.Run();
-app.Run();
+
+// Make Program accessible to tests
+public partial class Program { }

@@ -8,8 +8,17 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // OpenAPI/Swagger helps explore endpoints and payloads during development.
 builder.Services.AddOpenApi();
-builder.Services.AddDbContext<TodoDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Use an in-memory database when running tests to avoid provider conflicts and external dependencies.
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContext<TodoDbContext>(options =>
+        options.UseInMemoryDatabase("TodoTests"));
+}
+else
+{
+    builder.Services.AddDbContext<TodoDbContext>(options =>
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+}
 
 var app = builder.Build();
 
@@ -117,6 +126,21 @@ todos.MapDelete("/{id:int}", async (int id, TodoDbContext db) =>
 
     return Results.NoContent();
 });
+
+// Test-only maintenance endpoints
+if (app.Environment.IsEnvironment("Testing"))
+{
+    app.MapPost("/testing/reset", async (TodoDbContext db) =>
+    {
+        var all = db.Todos.ToList();
+        if (all.Count > 0)
+        {
+            db.Todos.RemoveRange(all);
+            await db.SaveChangesAsync();
+        }
+        return Results.NoContent();
+    }).WithTags("Testing");
+}
 
 app.Run();
 

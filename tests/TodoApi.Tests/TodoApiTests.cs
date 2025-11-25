@@ -1,13 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Linq;
 using Xunit;
 using TodoApi.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using TodoApi.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Hosting;
 
 namespace TodoApi.Tests;
 
@@ -17,29 +17,21 @@ public class TodoApiTests : IClassFixture<WebApplicationFactory<Program>>
 
     public TodoApiTests(WebApplicationFactory<Program> factory)
     {
+        // Switch environment so Program.cs picks the in-memory provider automatically.
         _factory = factory.WithWebHostBuilder(builder =>
         {
-            builder.ConfigureServices(services =>
-            {
-                // Remove the existing DbContext registration
-                services.RemoveAll(typeof(DbContextOptions<TodoDbContext>));
-                
-                // Add in-memory database for testing
-                services.AddDbContext<TodoDbContext>(options =>
-                {
-                    options.UseInMemoryDatabase("TestDatabase_" + Guid.NewGuid());
-                });
-                
-                // Ensure database is created
-                var sp = services.BuildServiceProvider();
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<TodoDbContext>();
-                db.Database.EnsureCreated();
-            });
+            builder.UseEnvironment("Testing");
         });
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient();
+    private HttpClient CreateClient()
+    {
+        var client = _factory.CreateClient();
+        // Clear database via test-only endpoint to ensure isolation
+        var resetResponse = client.PostAsync("/testing/reset", null).GetAwaiter().GetResult();
+        resetResponse.EnsureSuccessStatusCode();
+        return client;
+    }
 
     #region Root Endpoint Tests
 
